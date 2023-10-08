@@ -1,0 +1,53 @@
+pipeline {
+    agent any
+    environment {
+        DOCKERHUB_CRED = credentials('dockerhub')
+    }
+    
+    stages {
+        stage('Checkout') {
+            steps {
+                git branch:'main', url: 'https://github.com/mohsin-786/Jenkins-Zero-To-Hero.git'
+                echo "Done"
+            }
+        }
+        stage('Build') {
+            steps {
+                sh '''
+                echo "Entering python-jenkins-argocd-k8s directory"
+                cd python-jenkins-argocd-k8s
+                docker build -t mohsin01/django-todo:${BUILD_NUMBER} .
+                '''
+            }
+        }    
+        stage('Push') {
+            steps {
+               //withCredentials([usernamePassword(credentialsId: 'dockerhub', passwordVariable: 'PASS', usernameVariable: 'USER')]) {
+                    sh '''
+                    echo "Pushing to Dockerhub"
+                    echo $DOCKERHUB_CRED_PSW | docker login -u $DOCKERHUB_CRED_USR --password-stdin
+                    docker push mohsin01/django-todo:${BUILD_NUMBER}
+                    echo "Done"
+                    '''
+               // }    
+            }  
+        }
+        stage('Update repo') {
+            steps {
+                withCredentials([usernamePassword(credentialsId: 'gitwa', passwordVariable: 'PASS', usernameVariable: 'USER')]) {
+                        sh '''
+                        cd python-jenkins-argocd-k8s/deploy/
+                        cat deploy.yaml
+                        sed -i "19s/:[0-9]\\+/:${BUILD_NUMBER}/g" deploy.yaml
+                        cat deploy.yaml
+                        git add deploy.yaml
+                        git commit -m 'Updated the deploy yaml | Jenkins Pipeline'
+                        git remote -v
+                        git push https://$PASS@github.com/$USER/Jenkins-Zero-To-Hero.git HEAD:main
+                        '''                        
+                }
+            }
+        }
+    }
+}
+
